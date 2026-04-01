@@ -1,0 +1,10 @@
+[package]
+name = "qrgen"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+qrcode = "0.14"
+url = "2"
