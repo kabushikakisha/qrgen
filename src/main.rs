@@ -55,6 +55,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn validate_url(input: &str) -> Result<(), Box<dyn Error>> {
+    if input.is_empty() {
+        return Err("Error: URL cannot be empty. Please provide a valid URL.".into());
+    }
+
     let parsed = Url::parse(input)?;
 
     match parsed.scheme() {
@@ -74,4 +78,109 @@ fn ensure_parent_dir(path: &PathBuf) -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_validate_url_valid_https() {
+        assert!(validate_url("https://example.com").is_ok());
+    }
+
+    #[test]
+    fn test_validate_url_valid_http() {
+        assert!(validate_url("http://example.com").is_ok());
+    }
+
+    #[test]
+    fn test_validate_url_empty() {
+        let result = validate_url("");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("URL cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_url_invalid_scheme() {
+        let result = validate_url("ftp://example.com");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("unsupported URL scheme"));
+    }
+
+    #[test]
+    fn test_validate_url_malformed() {
+        let result = validate_url("not a url");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ensure_parent_dir_existing() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.png");
+        assert!(ensure_parent_dir(&file_path).is_ok());
+    }
+
+    #[test]
+    fn test_ensure_parent_dir_new_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("subdir").join("test.png");
+        assert!(ensure_parent_dir(&file_path).is_ok());
+        assert!(file_path.parent().unwrap().exists());
+    }
+
+    #[test]
+    fn test_args_parsing() {
+        let args = Args::parse_from(["qrgen", "https://example.com"]);
+        assert_eq!(args.url, "https://example.com");
+        assert_eq!(args.output, PathBuf::from("qr.png"));
+        assert_eq!(args.size, 512);
+        assert_eq!(args.no_quiet_zone, false);
+    }
+
+    #[test]
+    fn test_args_parsing_with_options() {
+        let args = Args::parse_from([
+            "qrgen",
+            "https://example.com",
+            "-o",
+            "custom.png",
+            "-s",
+            "256",
+            "--no-quiet-zone"
+        ]);
+        assert_eq!(args.url, "https://example.com");
+        assert_eq!(args.output, PathBuf::from("custom.png"));
+        assert_eq!(args.size, 256);
+        assert_eq!(args.no_quiet_zone, true);
+    }
+
+    #[test]
+    fn test_main_smoke() -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new().unwrap();
+        let output_path = temp_dir.path().join("test.png");
+
+        let args = Args {
+            url: "https://example.com".to_string(),
+            output: output_path.clone(),
+            size: 256,
+            no_quiet_zone: false,
+        };
+
+        validate_url(&args.url)?;
+        ensure_parent_dir(&args.output)?;
+
+        let code = QrCode::new(args.url.as_bytes())?;
+        let base_image = code.render::<Luma<u8>>()
+            .quiet_zone(!args.no_quiet_zone)
+            .build();
+
+        let image = image::imageops::resize(&base_image, args.size, args.size, FilterType::Nearest);
+        image.save(&args.output)?;
+
+        assert!(output_path.exists());
+
+        Ok(())
+    }
 }

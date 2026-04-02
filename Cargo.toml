@@ -8,3 +8,4 @@ clap = { version = "4", features = ["derive"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 qrcode = "0.14"
 url = "2"
+tempfile = "3.27.0"
